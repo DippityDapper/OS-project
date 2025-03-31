@@ -1,5 +1,0 @@
-C:/dev/cpp/OS-project/cmake-build-debug/CMakeFiles/OS_project.dir
-C:/dev/cpp/OS-project/cmake-build-debug/CMakeFiles/VDIFileTest.dir
-C:/dev/cpp/OS-project/cmake-build-debug/CMakeFiles/MBRPartitionTest.dir
-C:/dev/cpp/OS-project/cmake-build-debug/CMakeFiles/edit_cache.dir
-C:/dev/cpp/OS-project/cmake-build-debug/CMakeFiles/rebuild_cache.dir
