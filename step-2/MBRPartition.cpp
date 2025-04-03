@@ -1,4 +1,5 @@
 #include <cstring>
+#include <iostream>
 #include "MBRPartition.h"
 
 bool MBRPartition::Open(char *fn, int part)
@@ -14,6 +15,7 @@ bool MBRPartition::Open(char *fn, int part)
     uint8_t mbr[512];
     if (vdi->Read(mbr, 512) != 512)
     {
+        std::cerr << "Failed to open. Could not read file " << fn << "\n";
         vdi->Close();
         delete vdi;
         vdi = nullptr;
@@ -27,6 +29,7 @@ bool MBRPartition::Open(char *fn, int part)
 
     if (part < 0 || part > 3)
     {
+        std::cerr << "Failed to open. Invalid partition " << part << "\n";
         Close();
         return false;
     }
@@ -43,26 +46,38 @@ bool MBRPartition::Open(char *fn, int part)
 
 void MBRPartition::Close()
 {
-    vdi->Close();
-    delete vdi;
-    vdi = nullptr;
+    if (vdi)
+    {
+        vdi->Close();
+        delete vdi;
+        vdi = nullptr;
+    }
 }
 
-ssize_t MBRPartition::Read(void *buf, ssize_t count)
+ssize_t MBRPartition::Read(void *buf, size_t count)
 {
     if (cursor >= partitionSize)
+    {
+        std::cerr << "Cursor outside partition" << "\n";
         return 0;
+    }
 
     if (cursor + count > partitionSize)
         count = partitionSize - cursor;
 
     off_t absoluteOffset = partitionOffset + cursor;
     if (vdi->lSeek(static_cast<uint32_t>(absoluteOffset), SEEK_SET_) != static_cast<uint32_t>(absoluteOffset))
+    {
+        std::cerr << "Failed to set cursor in VDI" << "\n";
         return -1;
+    }
 
     ssize_t bytesRead = vdi->Read(buf, count);
     if (bytesRead < 0)
+    {
+        std::cerr << "Failed to read from VDI" << "\n";
         return -1;
+    }
 
     cursor += bytesRead;
     return bytesRead;
@@ -71,18 +86,27 @@ ssize_t MBRPartition::Read(void *buf, ssize_t count)
 ssize_t MBRPartition::Write(void *buf, size_t count)
 {
     if (cursor >= partitionSize)
+    {
+        std::cerr << "Cursor outside partition" << "\n";
         return 0;
+    }
 
     if (cursor + count > partitionSize)
         count = partitionSize - cursor;
 
     off_t absoluteOffset = partitionOffset + cursor;
     if (vdi->lSeek(static_cast<uint32_t>(absoluteOffset), SEEK_SET_) != static_cast<uint32_t>(absoluteOffset))
+    {
+        std::cerr << "Failed to set cursor in VDI" << "\n";
         return -1;
+    }
 
     ssize_t bytesWritten = vdi->Write(buf, count);
     if (bytesWritten < 0)
+    {
+        std::cerr << "Failed to write to VDI" << "\n";
         return -1;
+    }
 
     cursor += bytesWritten;
     return bytesWritten;
@@ -99,10 +123,16 @@ ssize_t MBRPartition::lSeek(ssize_t offset, int whence)
     else if (whence == SEEK_END_)
         newCursor = partitionSize + offset;
     else
+    {
+        std::cerr << "Invalid whence " << whence << "\n";
         return cursor;
+    }
 
     if (newCursor > partitionSize)
+    {
+        std::cerr << "Cursor exceeded partition" << "\n";
         return cursor;
+    }
 
     cursor = newCursor;
     return cursor;

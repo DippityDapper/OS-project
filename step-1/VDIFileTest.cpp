@@ -143,7 +143,8 @@ void TestVDIHeader(VDIFile *vdi)
 
 int main()
 {
-    VDIFile *vdi = TestVDIOpen("c:/dev/cpp/OS-project/vdi-files/good-dynamic-1k.vdi");
+    char filename[] = "c:/dev/cpp/OS-project/vdi-files/good-dynamic-1k.vdi";
+    VDIFile *vdi = TestVDIOpen(filename);
     if (vdi)
     {
         TestVDIHeader(vdi);

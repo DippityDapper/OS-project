@@ -8,7 +8,10 @@ bool VDIFile::Open(char *fn)
     fileDescriptor = open(fn, O_RDWR);
 
     if (fileDescriptor < 0)
+    {
+        std::cerr << "Could not open file " << fn << "\n";
         return false;
+    }
 
     cursor = 0;
     header = new VDIHeader;
@@ -16,6 +19,7 @@ bool VDIFile::Open(char *fn)
     ssize_t bytesRead = read(fileDescriptor, header, sizeof(VDIHeader));
     if (bytesRead != sizeof(VDIHeader))
     {
+        std::cerr << "Could not read from file " << fn << "\n";
         close(fileDescriptor);
         delete header;
         header = nullptr;
@@ -40,7 +44,8 @@ bool VDIFile::Open(char *fn)
 
 void VDIFile::Close()
 {
-    if (fileDescriptor >= 0) {
+    if (fileDescriptor >= 0)
+    {
         close(fileDescriptor);
         fileDescriptor = -1;
     }
@@ -76,17 +81,26 @@ ssize_t VDIFile::Read(void *buf, size_t count)
         {
             memset(buffer, 0, bytesInBlock);
         }
-        if (physicalBlock == 0xFFFFFFFE)
+        else if (physicalBlock == 0xFFFFFFFE)
         {
             memset(buffer, 0, bytesInBlock);
         }
         else
         {
-            off_t physicalOffset = header->offsetData + (physicalBlock * blockSize) + offsetInBlock;
+            off_t physicalOffset;
+
+            if (translationMap)
+                physicalOffset = header->offsetData + (physicalBlock * blockSize) + offsetInBlock;
+            else
+                physicalOffset = header->offsetData + (logicalBlock * blockSize) + offsetInBlock;
+
             lseek(fileDescriptor, physicalOffset, SEEK_SET);
             ssize_t bytesRead = read(fileDescriptor, buffer, bytesInBlock);
             if (bytesRead < 0)
+            {
+                std::cerr << "Could not read from file descriptor " << fileDescriptor << "\n";
                 return -1;
+            }
         }
 
         cursor += bytesInBlock;
@@ -122,6 +136,12 @@ ssize_t VDIFile::Write(void *buf, size_t count)
             header->blocksAllocated++;
             translationMap[logicalBlock] = physicalBlock;
 
+            lseek(fileDescriptor, header->offsetBlocks + (logicalBlock * sizeof(uint32_t)), SEEK_SET);
+            write(fileDescriptor, &translationMap[logicalBlock], sizeof(uint32_t));
+
+            lseek(fileDescriptor, 0, SEEK_SET);
+            write(fileDescriptor, header, sizeof(VDIHeader));
+
             off_t newBlockOffset = header->offsetData + (physicalBlock * blockSize);
             lseek(fileDescriptor, newBlockOffset, SEEK_SET);
 
@@ -136,7 +156,10 @@ ssize_t VDIFile::Write(void *buf, size_t count)
         ssize_t bytesWritten = write(fileDescriptor, buffer, bytesInBlock);
 
         if (bytesWritten < 0)
+        {
+            std::cerr << "Could not write to file descriptor " << fileDescriptor << "\n";
             return -1;
+        }
 
         cursor += bytesWritten;
         buffer += bytesWritten;
@@ -156,10 +179,16 @@ uint32_t VDIFile::lSeek(uint32_t offset, int anchor)
     else if (anchor == SEEK_END_)
         newCursor = header->diskSize - offset;
     else
+    {
+        std::cerr << "Invalid anchor type " << anchor << "\n";
         return cursor;
+    }
 
     if (newCursor > header->diskSize)
+    {
+        std::cerr << "Cursor exceeded disk" << "\n";
         return cursor;
+    }
 
     cursor = newCursor;
     return cursor;

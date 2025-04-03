@@ -10,7 +10,7 @@ struct PartitionEntry
     uint8_t firstCHS[3];
     uint8_t partitionType;
     uint8_t lastCHS[3];
-    int32_t firstSector;
+    uint32_t firstSector;
     uint32_t totalSectors;
 };
 
@@ -26,7 +26,7 @@ public:
 
     bool Open(char *fn, int part);
     void Close();
-    ssize_t Read(void *buf, ssize_t count);
+    ssize_t Read(void *buf, size_t count);
     ssize_t Write(void *buf, size_t count);
     ssize_t lSeek(ssize_t offset, int whence);
 };
