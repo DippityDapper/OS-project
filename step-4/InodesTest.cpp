@@ -68,19 +68,19 @@ int main()
         return -1;
     
     uint32_t inodeNum = 2; // root dir
-    Inodes *inodes = new Inodes;
-    Inode *inode = new Inode;
+    Inodes *inodes = new Inodes(extFile);
 
-    if (inodes->FetchInode(extFile, inodeNum, inode) == 0)
-    {
-        DisplayInode(inodeNum, inode);
-        std::cout << "\nHex dump:\n";
-        printf("inode");
-    }
-    else
+    Inode *inode = new Inode;
+    if (!inodes->FetchInode(extFile, inodeNum, inode))
     {
         std::cerr << "Failed to fetch inode " << inodeNum << "\n";
+        return -1;
     }
 
+    DisplayInode(inodeNum, inode);
+    extFile->Close();
+    delete extFile;
+    delete inode;
+    delete inodes;
     return 0;
 }

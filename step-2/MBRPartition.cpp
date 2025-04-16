@@ -71,7 +71,6 @@ ssize_t MBRPartition::Read(void *buf, size_t count)
         std::cerr << "Failed to set cursor in VDI" << "\n";
         return -1;
     }
-
     ssize_t bytesRead = vdi->Read(buf, count);
     if (bytesRead < 0)
     {

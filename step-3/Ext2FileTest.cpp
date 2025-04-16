@@ -154,13 +154,13 @@ void PrintBlockGroupDescriptorTable(uint32_t group, Ext2File *extFile)
     printf("Group\tBlock Bitmap\tInode Bitmap\tInode Table\tFree Blocks\tFree Inodes\tUsed Dirs\n");
     printf("-----\t------------\t------------\t-----------\t-----------\t-----------\t--------\n");
 
-    uint32_t numBlockGroups = (extFile->superBlock->blocksCount + extFile->superBlock->blocksPerGroup - 1) / extFile->superBlock->blocksPerGroup;
+    uint32_t numBlockGroups = (extFile->superblock->blocksCount + extFile->superblock->blocksPerGroup - 1) / extFile->superblock->blocksPerGroup;
 
     uint32_t bgdtStartBlock;
     if (group == 0)
         bgdtStartBlock = 1;
     else
-        bgdtStartBlock = group * extFile->superBlock->blocksPerGroup + 1;
+        bgdtStartBlock = group * extFile->superblock->blocksPerGroup + 1;
 
     BlockGroupDescriptor *bgdt = new BlockGroupDescriptor[numBlockGroups];
 
@@ -189,7 +189,7 @@ void PrintBlockGroupDescriptorTable(uint32_t group, Ext2File *extFile)
 
 bool PrintGroup(uint32_t group, Ext2File *extFile, SuperBlock *sb)
 {
-    uint32_t groupStartBlock = group * extFile->superBlock->blocksPerGroup;
+    uint32_t groupStartBlock = group * extFile->superblock->blocksPerGroup;
 
     if (!extFile->FetchSuperBlock(groupStartBlock, sb))
     {
@@ -198,9 +198,10 @@ bool PrintGroup(uint32_t group, Ext2File *extFile, SuperBlock *sb)
         delete extFile;
         return false;
     }
+
     printf("Superblock from block %u\n", groupStartBlock);
     PrintSuperBlock(sb);
-    //PrintBlockGroupDescriptorTable(group, extFile);
+    PrintBlockGroupDescriptorTable(group, extFile);
     std::cout << "\n\n\n";
     return true;
 }
@@ -208,16 +209,17 @@ bool PrintGroup(uint32_t group, Ext2File *extFile, SuperBlock *sb)
 int main()
 {
     Ext2File *extFile = new Ext2File;
-    char filename[] = "c:/dev/cpp/OS-project/vdi-files/good-dynamic-2k.vdi";
+    char filename[] = "c:/dev/cpp/OS-project/vdi-files/good-dynamic-1k.vdi";
     if (!extFile->Open(filename))
     {
         std::cerr << "Failed to open file: " << filename << "\n";
         return -1;
     }
 
-    SuperBlock *sb = extFile->superBlock;
+    SuperBlock *sb = new SuperBlock;
 
-    uint32_t  totalBG = (sb->blocksCount + sb->blocksPerGroup - 1) / sb->blocksPerGroup;
+    uint32_t  totalBG = (extFile->superblock->blocksCount + extFile->superblock->blocksPerGroup - 1) / extFile->superblock->blocksPerGroup;
+    std::cout << totalBG << std::endl;
     for (int i = 0; i < totalBG; i++)
     {
         if (i > 9)
@@ -225,8 +227,10 @@ int main()
 
         if (!PrintGroup(i, extFile, sb))
             return 1;
+
         if (i == 0)
             continue;
+
         i++;
     }
 

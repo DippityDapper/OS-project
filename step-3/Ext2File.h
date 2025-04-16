@@ -78,7 +78,7 @@ class Ext2File
 {
 public:
     MBRPartition *mbrPart;
-    SuperBlock *superBlock;
+    SuperBlock *superblock;
 
     bool Open(char *fn);
     void Close();

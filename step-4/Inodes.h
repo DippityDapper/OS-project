@@ -32,13 +32,16 @@ class Inodes
 public:
     BlockGroupDescriptor *groupDesc;
 
+    bool SetGroupDesc(Ext2File *f);
 
-    int32_t FetchInode(Ext2File *f, uint32_t iNum, Inode *buf);
-    int32_t WriteInode(Ext2File* f, uint32_t iNum, const Inode* buf);
+    Inodes(Ext2File *f);
 
-    int32_t InodeInUse(Ext2File* f, uint32_t iNum);
-    uint32_t AllocateInode(Ext2File* f, int32_t group);
-    int32_t FreeInode(Ext2File* f, uint32_t iNum);
+    bool FetchInode(Ext2File *f, uint32_t iNum, Inode *buf);
+    bool WriteInode(Ext2File* f, uint32_t iNum, Inode* buf);
+
+    bool InodeInUse(Ext2File* f, uint32_t iNum);
+    int32_t AllocateInode(Ext2File* f, int32_t group);
+    bool FreeInode(Ext2File* f, uint32_t iNum);
 };
 
 #endif
