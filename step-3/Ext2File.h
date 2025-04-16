@@ -58,6 +58,7 @@ struct SuperBlock
     uint32_t firstMetaBg;
 };
 
+#pragma pack(push, 1)
 struct BlockGroupDescriptor
 {
     uint32_t blockBitmap;
@@ -69,7 +70,7 @@ struct BlockGroupDescriptor
     uint16_t pad;
     char reserved[12];
 };
-
+#pragma pack(pop)
 #endif
 
 

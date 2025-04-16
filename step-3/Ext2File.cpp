@@ -80,14 +80,14 @@ bool Ext2File::FetchBlock(uint32_t blockNum, void *buf)
 {
     uint32_t blockSize = 1024 << superBlock->logBlockSize;
     uint32_t offset = (superBlock->firstDataBlock + blockNum) * blockSize;
-
+    //std::cout << superBlock->firstDataBlock << "\n";
     if (mbrPart->lSeek(offset, SEEK_SET_) != offset)
     {
         std::cerr << "Failed to seek to block offset" << "\n";
         return false;
     }
-
     ssize_t bytesRead = mbrPart->Read(buf, blockSize);
+
     if (bytesRead != static_cast<ssize_t>(blockSize))
     {
         std::cerr << "Failed to read. Wrong number of bytes " << bytesRead << "\n";
@@ -101,17 +101,17 @@ bool Ext2File::WriteBlock(uint32_t blockNum, void *buf)
 {
     uint32_t blockSize = 1024 << superBlock->logBlockSize;
     uint32_t offset = (superBlock->firstDataBlock + blockNum) * blockSize;
-
+    //std::cout << superBlock->firstDataBlock << "\n";
     if (mbrPart->lSeek(offset, SEEK_SET_) != offset)
     {
         std::cerr << "Failed to seek to block offset" << "\n";
         return false;
     }
-
     ssize_t bytesWritten = mbrPart->Write(buf, blockSize);
+
     if (bytesWritten != static_cast<ssize_t>(blockSize))
     {
-        std::cerr << "Failed to Write. Wrong number of bytes " << bytesWritten << "\n";
+        std::cerr << "Failed to read. Wrong number of bytes " << bytesWritten << "\n";
         return false;
     }
 
@@ -153,89 +153,33 @@ bool Ext2File::FetchSuperBlock(uint32_t blockNum, struct SuperBlock *sb)
 
 bool Ext2File::WriteSuperBlock(uint32_t blockNum, struct SuperBlock *sb)
 {
-    if (blockNum == 0)
-    {
-        if (mbrPart->lSeek(EXT2_SUPERBLOCK_OFFSET, SEEK_SET_) != EXT2_SUPERBLOCK_OFFSET)
-        {
-            std::cerr << "Failed to seek main superblock offset" << "\n";
-            return false;
-        }
-        if (mbrPart->Write(sb, EXT2_SUPERBLOCK_SIZE) != EXT2_SUPERBLOCK_SIZE)
-        {
-            std::cerr << "Failed to write main superblock" << "\n";
-            return false;
-        }
-    }
-    else
-    {
-        uint32_t blockSize = 1024 << superBlock->logBlockSize;
 
-        uint8_t *blockBuffer = new uint8_t[blockSize];
-        if (!FetchBlock(blockNum, blockBuffer))
-        {
-            std::cerr << "Failed to read block for backup superblock" << "\n";
-            delete[] blockBuffer;
-            return false;
-        }
-
-        memcpy(blockBuffer, sb, EXT2_SUPERBLOCK_SIZE);
-
-        bool result = WriteBlock(blockNum, blockBuffer);
-        delete[] blockBuffer;
-
-        if (!result)
-        {
-            std::cerr << "Failed to write backup superblock" << "\n";
-            return false;
-        }
-    }
-
-    return true;
 }
 
 bool Ext2File::FetchBGDT(uint32_t blockNum, BlockGroupDescriptor *bgdt)
 {
     uint32_t blockSize = 1024 << superBlock->logBlockSize;
-    uint32_t bgdtStartBlock = superBlock->firstDataBlock + 1;
-    uint32_t descriptorsPerBlock = blockSize / sizeof(BlockGroupDescriptor);
-    uint32_t blockOffset = blockNum / descriptorsPerBlock;
-    uint32_t entryOffset = blockNum % descriptorsPerBlock;
+    uint32_t totalBG = (superBlock->blocksCount + superBlock->blocksPerGroup - 1) / superBlock->blocksPerGroup;
+    uint32_t totalBytes = totalBG * sizeof(BlockGroupDescriptor);
+    uint32_t blocksNeeded = (totalBytes + blockSize - 1) / blockSize;
 
-    uint8_t *buffer = new uint8_t[blockSize];
-    if (!FetchBlock(bgdtStartBlock + blockOffset, buffer)) {
-        std::cerr << "FetchBGDT failed to fetch block" << "\n";
-        delete[] buffer;
-        return false;
+    uint8_t *tempBuffer = new uint8_t[blocksNeeded * blockSize];
+
+    for (uint32_t i = 0; i < blocksNeeded; i++)
+    {
+        if (!FetchBlock(blockNum + i, tempBuffer + i * blockSize))
+        {
+            std::cerr << "FetchBGDT failed to fetch block " << (blockNum + i) << "\n";
+            delete[] tempBuffer;
+            return false;
+        }
     }
 
-    memcpy(bgdt, buffer + (entryOffset * sizeof(BlockGroupDescriptor)),sizeof(BlockGroupDescriptor));
-
-    delete[] buffer;
+    memcpy(bgdt, tempBuffer, totalBytes);
+    delete[] tempBuffer;
     return true;
 }
 
 bool Ext2File::WriteBGDT(uint32_t blockNum, BlockGroupDescriptor *bgdt)
 {
-    uint32_t blockSize = 1024 << superBlock->logBlockSize;
-    uint32_t bgdtStartBlock = superBlock->firstDataBlock + 1;
-    uint32_t descriptorsPerBlock = blockSize / sizeof(BlockGroupDescriptor);
-    uint32_t blockOffset = blockNum / descriptorsPerBlock;
-    uint32_t entryOffset = blockNum % descriptorsPerBlock;
-
-    uint8_t *buffer = new uint8_t[blockSize];
-    if (!FetchBlock(bgdtStartBlock + blockOffset, buffer)) {
-        std::cerr << "WriteBGDT failed to fetch current BGDT block" << "\n";
-        delete[] buffer;
-        return false;
-    }
-
-    memcpy(buffer + (entryOffset * sizeof(BlockGroupDescriptor)), bgdt, sizeof(BlockGroupDescriptor));
-
-    bool result = WriteBlock(bgdtStartBlock + blockOffset, buffer);
-    if (!result) {
-        std::cerr << "WriteBGDT failed to write updated BGDT block" << "\n";
-    }
-
-    delete[] buffer;
-    return result;
 }

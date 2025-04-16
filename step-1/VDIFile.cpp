@@ -44,17 +44,17 @@ bool VDIFile::Open(char *fn)
 
 void VDIFile::Close()
 {
-    if (fileDescriptor >= 0)
-    {
-        close(fileDescriptor);
-        fileDescriptor = -1;
-    }
     delete header;
     header = nullptr;
     if (translationMap)
     {
         delete[] translationMap;
         translationMap = nullptr;
+    }
+    if (fileDescriptor >= 0)
+    {
+        close(fileDescriptor);
+        fileDescriptor = -1;
     }
 }
 
@@ -74,6 +74,7 @@ ssize_t VDIFile::Read(void *buf, size_t count)
             bytesInBlock = count;
 
         uint32_t physicalBlock = 0;
+
         if (translationMap)
             physicalBlock = translationMap[logicalBlock];
 

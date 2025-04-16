@@ -148,66 +148,89 @@ void PrintSuperBlock(const SuperBlock *sb)
     printf("First meta block group: %u\n", sb->firstMetaBg);
 }
 
-void PrintBlockGroupDescriptorTable(Ext2File *extFile)
+void PrintBlockGroupDescriptorTable(uint32_t group, Ext2File *extFile)
 {
     printf("Block group descriptor table:\n");
-    printf("Block\tBlock\tInode\tInode\tFree\tFree\tUsed\n");
-    printf("Number\tBitmap\tBitmap\tTable\tBlocks\tInodes\tDirs\n");
-    printf("------\t------\t------\t-----\t------\t------\t----\n");
+    printf("Group\tBlock Bitmap\tInode Bitmap\tInode Table\tFree Blocks\tFree Inodes\tUsed Dirs\n");
+    printf("-----\t------------\t------------\t-----------\t-----------\t-----------\t--------\n");
 
     uint32_t numBlockGroups = (extFile->superBlock->blocksCount + extFile->superBlock->blocksPerGroup - 1) / extFile->superBlock->blocksPerGroup;
-    BlockGroupDescriptor *bgd = new BlockGroupDescriptor;
+
+    uint32_t bgdtStartBlock;
+    if (group == 0)
+        bgdtStartBlock = 1;
+    else
+        bgdtStartBlock = group * extFile->superBlock->blocksPerGroup + 1;
+
+    BlockGroupDescriptor *bgdt = new BlockGroupDescriptor[numBlockGroups];
+
+    if (!extFile->FetchBGDT(bgdtStartBlock, bgdt))
+    {
+        std::cerr << "Failed to fetch the entire BGDT.\n";
+        delete[] bgdt;
+        return;
+    }
 
     for (uint32_t i = 0; i < numBlockGroups; i++)
     {
-        extFile->FetchBGDT(i, bgd);
-
-        printf("%6u\t%6u\t%6u\t%6u\t%6u\t%6u\t%6u\n",
+        printf("%6u\t%12u\t%12u\t%11u\t%11u\t%11u\t%8u\n",
                i,
-               bgd->blockBitmap,
-               bgd->inodeBitmap,
-               bgd->inodeTable,
-               bgd->freeBlocksCount,
-               bgd->freeInodesCount,
-               bgd->usedDirsCount);
+               bgdt[i].blockBitmap,
+               bgdt[i].inodeBitmap,
+               bgdt[i].inodeTable,
+               bgdt[i].freeBlocksCount,
+               bgdt[i].freeInodesCount,
+               bgdt[i].usedDirsCount);
     }
 
     printf("\n");
-    delete bgd;
+    delete[] bgdt;
+}
+
+bool PrintGroup(uint32_t group, Ext2File *extFile, SuperBlock *sb)
+{
+    uint32_t groupStartBlock = group * extFile->superBlock->blocksPerGroup;
+
+    if (!extFile->FetchSuperBlock(groupStartBlock, sb))
+    {
+        std::cerr << "Failed to fetch superblock from group "<< group << "\n";
+        extFile->Close();
+        delete extFile;
+        return false;
+    }
+    printf("Superblock from block %u\n", groupStartBlock);
+    PrintSuperBlock(sb);
+    //PrintBlockGroupDescriptorTable(group, extFile);
+    std::cout << "\n\n\n";
+    return true;
 }
 
 int main()
 {
     Ext2File *extFile = new Ext2File;
     char filename[] = "c:/dev/cpp/OS-project/vdi-files/good-dynamic-2k.vdi";
-    extFile->Open(filename);
+    if (!extFile->Open(filename))
+    {
+        std::cerr << "Failed to open file: " << filename << "\n";
+        return -1;
+    }
 
-    // --- Print Primary Superblock and BGDT ---
-    SuperBlock *sb = new SuperBlock;
-    extFile->FetchSuperBlock(0, sb);
-    printf("Superblock from block %u\n", 0);
-    PrintSuperBlock(sb);
+    SuperBlock *sb = extFile->superBlock;
 
-    uint32_t blockSize = 1024 << sb->logBlockSize;
-    uint8_t buffer[blockSize];
-    extFile->FetchBlock(0, buffer);
-    DisplayBuffer(buffer, blockSize, 0);
+    uint32_t  totalBG = (sb->blocksCount + sb->blocksPerGroup - 1) / sb->blocksPerGroup;
+    for (int i = 0; i < totalBG; i++)
+    {
+        if (i > 9)
+            continue;
 
-    PrintBlockGroupDescriptorTable(extFile);
-
-    // --- Print Backup Superblock and BGDT for group 1 ---
-    uint32_t group = 1;
-    uint32_t groupStartBlock = group * extFile->superBlock->blocksPerGroup;
-    extFile->FetchSuperBlock(groupStartBlock, sb);
-
-    printf("Superblock from block %u\n", groupStartBlock);
-    PrintSuperBlock(sb);
-
-    printf("Block group descriptor table from block %u\n\n", groupStartBlock + 1);
-    PrintBlockGroupDescriptorTable(extFile);
+        if (!PrintGroup(i, extFile, sb))
+            return 1;
+        if (i == 0)
+            continue;
+        i++;
+    }
 
     extFile->Close();
-    delete sb;
     delete extFile;
     return 0;
 }
