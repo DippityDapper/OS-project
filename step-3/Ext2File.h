@@ -91,6 +91,8 @@ public:
 
     bool FetchBGDT(uint32_t blockNum, BlockGroupDescriptor *bgdt);
     bool WriteBGDT(uint32_t blockNum, BlockGroupDescriptor *bgdt);
+
+    uint32_t AllocateBlock();
 };
 
 

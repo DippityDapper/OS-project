@@ -76,6 +76,16 @@ int main()
         std::cerr << "Failed to fetch inode " << inodeNum << "\n";
         return -1;
     }
+    DisplayInode(inodeNum, inode);
+
+    std::cout << "\n\n\n";
+
+    inodeNum = 11;
+    if (!inodes->FetchInode(extFile, inodeNum, inode))
+    {
+        std::cerr << "Failed to fetch inode " << inodeNum << "\n";
+        return -1;
+    }
 
     DisplayInode(inodeNum, inode);
     extFile->Close();

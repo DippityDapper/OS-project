@@ -235,3 +235,96 @@ bool Ext2File::WriteBGDT(uint32_t blockNum, BlockGroupDescriptor *bgdt)
     delete[] tmp;
     return true;
 }
+
+uint32_t Ext2File::AllocateBlock()
+{
+    uint32_t blockSize = 1024 << superblock->logBlockSize;
+    uint32_t blocksPerGroup = superblock->blocksPerGroup;
+    uint32_t totalGroups = (superblock->blocksCount + blocksPerGroup - 1) / blocksPerGroup;
+
+    BlockGroupDescriptor* groupDesc = new BlockGroupDescriptor[totalGroups];
+    if (!FetchBGDT(superblock->firstDataBlock + 1, groupDesc))
+    {
+        delete[] groupDesc;
+        return 0;
+    }
+
+    int32_t group = -1;
+    for (uint32_t g = 0; g < totalGroups; g++)
+    {
+        if (groupDesc[g].freeBlocksCount > 0)
+        {
+            group = g;
+            break;
+        }
+    }
+
+    if (group < 0)
+    {
+        delete[] groupDesc;
+        return 0;
+    }
+
+    uint8_t *buf = new uint8_t[blockSize];
+    if (!FetchBlock(groupDesc[group].blockBitmap, buf))
+    {
+        delete[] buf;
+        delete[] groupDesc;
+        return 0;
+    }
+
+    uint32_t newBlock = 0;
+    bool allocated = false;
+
+    for (uint32_t b = 0; b < blockSize && b * 8 < blocksPerGroup; b++)
+    {
+        if (buf[b] != 0xFF)
+        {
+            for (int bit = 0; bit < 8; bit++)
+            {
+                uint32_t blockIndex = b * 8 + bit;
+
+                if (blockIndex >= blocksPerGroup)
+                    break;
+
+                if (!(buf[b] & (1 << bit)))
+                {
+                    buf[b] |= (1 << bit);
+                    newBlock = group * blocksPerGroup + blockIndex + superblock->firstDataBlock;
+
+                    if (newBlock < superblock->blocksCount)
+                    {
+                        allocated = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (allocated)
+            break;
+    }
+
+    if (!allocated)
+    {
+        delete[] buf;
+        delete[] groupDesc;
+        return 0;
+    }
+
+    if (!WriteBlock(groupDesc[group].blockBitmap, buf))
+    {
+        delete[] buf;
+        delete[] groupDesc;
+        return 0;
+    }
+
+    superblock->freeBlocksCount--;
+    groupDesc[group].freeBlocksCount--;
+
+    WriteSuperBlock(superblock->firstDataBlock, superblock);
+    WriteBGDT(superblock->firstDataBlock + 1, groupDesc);
+
+    delete[] buf;
+    delete[] groupDesc;
+    return newBlock;
+}

@@ -32,3 +32,13 @@ add_executable(InodeTest step-4/InodesTest.cpp
         step-2/MBRPartition.h
         step-1/VDIFile.cpp
         step-1/VDIFile.h)
+
+add_executable(FileAccess step-5/FileAccess.cpp
+        step-4/Inodes.cpp
+        step-4/Inodes.h
+        step-3/Ext2File.cpp
+        step-3/Ext2File.h
+        step-2/MBRPartition.cpp
+        step-2/MBRPartition.h
+        step-1/VDIFile.cpp
+        step-1/VDIFile.h)
