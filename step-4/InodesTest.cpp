@@ -62,7 +62,7 @@ void DisplayInode(uint32_t inodeNum, Inode *inode)
 
 int main()
 {
-    char filename[] = "c:/dev/cpp/OS-project/vdi-files/good-dynamic-2k.vdi";
+    char filename[] = "c:/dev/cpp/OS-project/vdi-files/good-dynamic-1k.vdi";
     Ext2File *extFile = new Ext2File;
     if (!extFile->Open(filename))
         return -1;

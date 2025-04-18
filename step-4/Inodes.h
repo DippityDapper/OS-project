@@ -5,6 +5,7 @@
 
 #include "../step-3/Ext2File.h"
 
+#pragma pack(push,1)
 struct Inode
 {
     uint16_t mode;
@@ -26,6 +27,7 @@ struct Inode
     uint32_t faddr;
     uint8_t  osd2[12];
 };
+#pragma pack(pop)
 
 class Inodes
 {

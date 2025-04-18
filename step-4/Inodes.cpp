@@ -1,5 +1,4 @@
  #include <cstdint>
-#include <cstring>
 #include "Inodes.h"
 #include <iostream>
 
@@ -15,7 +14,8 @@
     groupDesc = new BlockGroupDescriptor[totalBG];
 
     uint32_t bgdtBlock = f->superblock->firstDataBlock + 1;
-    if (!f->FetchBGDT(bgdtBlock, groupDesc)) {
+    if (!f->FetchBGDT(bgdtBlock, groupDesc))
+    {
         std::cerr << "Failed to fetch BGDT\n";
         delete[] groupDesc;
         return false;
@@ -78,7 +78,7 @@ bool Inodes::WriteInode(Ext2File* f, uint32_t iNum, Inode* buf)
     }
 
     uint32_t offset = (localIndex % inodesPerBlock) * inodeSize;
-    memcpy(buf, tmp + offset, sizeof(Inode));
+    memcpy(tmp + offset, buf, sizeof(Inode));
 
     if (!f->WriteBlock(targetBlock, tmp))
     {
@@ -92,18 +92,19 @@ bool Inodes::WriteInode(Ext2File* f, uint32_t iNum, Inode* buf)
 
  bool Inodes::InodeInUse(Ext2File* f, uint32_t iNum)
  {
-     // invalid?
      if (iNum == 0 || iNum > f->superblock->inodesCount)
          return false;
 
      uint32_t index = iNum - 1;
+
+     if (f->superblock->inodesPerGroup == 0)
+         return false;
      uint32_t group = index / f->superblock->inodesPerGroup;
      uint32_t localIndex = index % f->superblock->inodesPerGroup;
 
      uint32_t blockSize = 1024 << f->superblock->logBlockSize;
      uint32_t bitmapBlockNum = groupDesc[group].inodeBitmap;
 
-     // read the bitmap
      uint8_t *buf= new uint8_t[blockSize];
      if (!f->FetchBlock(bitmapBlockNum, buf))
          return false;
@@ -118,84 +119,72 @@ bool Inodes::WriteInode(Ext2File* f, uint32_t iNum, Inode* buf)
 
  int32_t Inodes::AllocateInode(Ext2File* f, int32_t group)
  {
-     uint32_t ngroups = (f->superblock->inodesCount + f->superblock->inodesPerGroup - 1) / f->superblock->inodesPerGroup;
      uint32_t inodesPerGroup = f->superblock->inodesPerGroup;
      uint32_t blockSize = 1024 << f->superblock->logBlockSize;
 
-     auto try_group = [&](uint32_t g) -> int32_t
+     uint8_t *buf= new uint8_t[blockSize];
+     if (!f->FetchBlock(groupDesc[group].inodeBitmap, buf))
      {
-         // load bitmap
-         uint8_t *buf= new uint8_t[blockSize];
-         if (!f->FetchBlock(groupDesc[g].inodeBitmap, buf))
-         {
-             delete[] buf;
-             return -1;
-         }
+         delete[] buf;
+         return -1;
+     }
 
-         uint32_t bytes = (inodesPerGroup + 7) / 8;
-         for (uint32_t b = 0; b < bytes; ++b)
+     bool allocated = false;
+     uint32_t newIno = 0;
+     uint32_t bytes = (inodesPerGroup + 7) / 8;
+
+     for (uint32_t b = 0; b < bytes; ++b)
+     {
+         if (allocated)
+             break;
+
+         if (buf[b] != 0xFF)
          {
-             if (buf[b] != 0xFF)
-             { // has a zero bit
-                 for (int bit = 0; bit < 8; ++bit)
+             for (int bit = 0; bit < 8; ++bit)
+             {
+                 uint32_t idx = b * 8 + bit;
+
+                 if (idx >= inodesPerGroup)
+                     break;
+
+                 if (!(buf[b] & (1u << bit)))
                  {
-                     uint32_t idx = b * 8 + bit;
-                     if (idx >= inodesPerGroup)
-                         break;
-                     if ((buf[b] & (1u << bit)) == 0)
-                     {
-                         // mark it
-                         buf[b] |= (1u << bit);
-                         if (!f->WriteBlock(groupDesc[g].inodeBitmap, buf))
-                         {
-                             delete[] buf;
-                             return -1;
-                         }
-
-                         // compute global inode number (1-based)
-                         uint32_t newIno = g * inodesPerGroup + idx + 1;
-
-                         // update counts
-                         f->superblock->freeInodesCount--;
-                         groupDesc[g].freeInodesCount--;
-                         // write superblock and BGDT back
-                         f->WriteSuperBlock(f->superblock->firstDataBlock, f->superblock);
-                         f->WriteBGDT(f->superblock->firstDataBlock + 1, groupDesc);
-
-                         delete[] buf;
-                         return static_cast<int32_t>(newIno);
-                     }
+                     buf[b] |= (1u << bit);
+                     newIno = group * inodesPerGroup + idx + 1;
+                     allocated = true;
+                     break;
                  }
              }
          }
+     }
+
+     if (!allocated)
+     {
          delete[] buf;
          return -1;
-     };
+     }
 
-     // choose which group(s) to try
-     if (group >= 0 && static_cast<uint32_t>(group) < ngroups)
+     if (!f->WriteBlock(groupDesc[group].inodeBitmap, buf))
      {
-         return try_group(group);
-     }
-     else if (group == -1)
-     {
-         for (uint32_t g = 0; g < ngroups; ++g)
-         {
-             int32_t ino = try_group(g);
-             if (ino > 0)
-                 return ino;
-         }
+         delete[] buf;
          return -1;
      }
-     else
-     {
-         return -1;
-     }
+
+     f->superblock->freeInodesCount--;
+     groupDesc[group].freeInodesCount--;
+     f->WriteSuperBlock(f->superblock->firstDataBlock, f->superblock);
+
+     uint32_t descsPerBlock = blockSize / sizeof(BlockGroupDescriptor);
+     uint32_t bgdtBlock = f->superblock->firstDataBlock + 1 + (group / descsPerBlock);
+
+     f->WriteBGDT(bgdtBlock,&groupDesc[(group / descsPerBlock) * descsPerBlock]);
+
+     delete[] buf;
+     return static_cast<int32_t>(newIno);
  }
 
  bool Inodes::FreeInode(Ext2File* f, uint32_t iNum)
  {
-     // invalid?
      if (iNum == 0 || iNum > f->superblock->inodesCount)
          return false;
 
@@ -206,7 +195,6 @@ bool Inodes::WriteInode(Ext2File* f, uint32_t iNum, Inode* buf)
      uint32_t blockSize = 1024 << f->superblock->logBlockSize;
      uint32_t bitmapBlockNum = groupDesc[group].inodeBitmap;
 
-     // load bitmap
      uint8_t *buf= new uint8_t[blockSize];
      if (!f->FetchBlock(bitmapBlockNum, buf))
      {
@@ -215,9 +203,8 @@ bool Inodes::WriteInode(Ext2File* f, uint32_t iNum, Inode* buf)
      }
 
      uint32_t byteOff = localIndex / 8;
-     uint32_t bitOff  = localIndex % 8;
+     uint32_t bitOff = localIndex % 8;
 
-     // clear bit
      buf[byteOff] &= ~(1u << bitOff);
 
      if (!f->WriteBlock(bitmapBlockNum, buf))
@@ -226,7 +213,6 @@ bool Inodes::WriteInode(Ext2File* f, uint32_t iNum, Inode* buf)
          return false;
      }
 
-     // update counts
      f->superblock->freeInodesCount++;
      groupDesc[group].freeInodesCount++;
      f->WriteSuperBlock(f->superblock->firstDataBlock, f->superblock);
